@@ -17,6 +17,41 @@ let harmonicOscillators = [];
 let phase = 0;
 let currentObjectCount = 0;
 
+// Bounding box tracking
+let activeBoxes = [];
+
+class BoundingBox {
+  constructor(x, y, w, h) {
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.lifetime = 0;
+    this.lastSeen = frameCount;
+  }
+
+  update(x, y, w, h) {
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.lifetime++;
+    this.lastSeen = frameCount;
+  }
+}
+
+function calculateIoU(box1, box2) {
+  let x1 = Math.max(box1.x, box2.x);
+  let y1 = Math.max(box1.y, box2.y);
+  let x2 = Math.min(box1.x + box1.w, box2.x + box2.w);
+  let y2 = Math.min(box1.y + box1.h, box2.y + box2.h);
+  let interArea = Math.max(0, x2 - x1) * Math.max(0, y2 - y1);
+  let box1Area = box1.w * box1.h;
+  let box2Area = box2.w * box2.h;
+  let unionArea = box1Area + box2Area - interArea;
+  return unionArea > 0 ? interArea / unionArea : 0;
+}
+
 
 
 function setup() {
@@ -233,37 +268,59 @@ function draw() {
       hierarchy = new cv.Mat();
       cv.findContours(thresholded, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE, new cv.Point(0, 0));
       
-      let objectCount = 0;
-      
-      // Draw contours and bounding boxes if not in thresholded mode
-      if (contours && !showThresholded) {
-        noStroke();
-        for (var i = 0; i < contours.size(); i++) {
-          fill(0, 0, 255, 128);
-          var contour = contours.get(i);
-          beginShape();
-          // contour points are stored in contour.data32S as [x0,y0,x1,y1,...]
-          var pts = contour.data32S;
-          for (var p = 0; p < pts.length; p += 2) {
-            var x = pts[p];
-            var y = pts[p + 1];
-            vertex(x, y);
-          }
-          endShape(CLOSE);
-
-          noFill();
-          stroke(255, 255, 255);
-          var box = cv.boundingRect(contour);
-          rect(box.x, box.y, box.width, box.height);
-
-          // free contour Mat
-          contour.delete();
-          objectCount++; // Count each bounding box drawn
-        }
-        // free contours structures
-        hierarchy.delete();
-        contours.delete();
+      // Extract new bounding boxes
+      let newBoxes = [];
+      for (let i = 0; i < contours.size(); i++) {
+        let contour = contours.get(i);
+        let box = cv.boundingRect(contour);
+        newBoxes.push({x: box.x, y: box.y, w: box.width, h: box.height});
+        contour.delete();
       }
+      
+      // Match new boxes to active boxes
+      let matched = new Set();
+      for (let newBox of newBoxes) {
+        let bestMatch = null;
+        let bestIoU = 0;
+        for (let activeBox of activeBoxes) {
+          let iou = calculateIoU(newBox, activeBox);
+          if (iou > 0.5 && iou > bestIoU) {
+            bestMatch = activeBox;
+            bestIoU = iou;
+          }
+        }
+        if (bestMatch) {
+          bestMatch.update(newBox.x, newBox.y, newBox.w, newBox.h);
+          matched.add(bestMatch);
+        } else {
+          activeBoxes.push(new BoundingBox(newBox.x, newBox.y, newBox.w, newBox.h));
+        }
+      }
+      
+      // Remove old boxes (not seen for 30 frames)
+      activeBoxes = activeBoxes.filter(box => frameCount - box.lastSeen < 30);
+      
+      // Draw all bounding boxes
+      for (let box of activeBoxes) {
+        noFill();
+        stroke(255, 255, 255);
+        rect(box.x, box.y, box.w, box.h);
+      }
+      
+      // Draw green checks for the 5 longest living boxes
+      let sortedBoxes = activeBoxes.slice().sort((a, b) => b.lifetime - a.lifetime);
+      for (let i = 0; i < Math.min(5, sortedBoxes.length); i++) {
+        let box = sortedBoxes[i];
+        fill(0, 255, 0);
+        noStroke();
+        text("✓", box.x + box.w + 10, box.y + box.h / 2);
+      }
+      
+      // free contours structures
+      hierarchy.delete();
+      contours.delete();
+      
+      let objectCount = activeBoxes.length;
       
       // Update object count display and audio
       if (this.contourCountDiv) {
