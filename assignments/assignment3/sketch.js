@@ -9,6 +9,7 @@ let showThresholded = false;
 
 // UI element references
 let blurSlider, thresholdSlider;
+let objectCountDiv;
 
 
 
@@ -72,9 +73,19 @@ function setup() {
   thresholdCheckbox.style('font-size', '14px');
   thresholdCheckbox.style('font-family', 'sans-serif');
 
+  let contourCountDiv = createDiv('Objects: 0');
+  contourCountDiv.position(10, 135);
+  contourCountDiv.style('color', '#fff');
+  contourCountDiv.style('font-size', '16px');
+  contourCountDiv.style('font-family', 'sans-serif');
+  contourCountDiv.style('background', 'rgba(0,0,0,0.7)');
+  contourCountDiv.style('padding', '5px 10px');
+  contourCountDiv.style('border-radius', '4px');
+
   // Store references for use in draw()
   this.blurSlider = blurSlider;
   this.thresholdSlider = thresholdSlider;
+  this.contourCountDiv = contourCountDiv;
 
   // Set up event handlers
   blurSlider.input(() => {
@@ -198,7 +209,9 @@ function draw() {
       hierarchy = new cv.Mat();
       cv.findContours(thresholded, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE, new cv.Point(0, 0));
       
-      // Draw contours if not in thresholded mode
+      let objectCount = 0;
+      
+      // Draw contours and bounding boxes if not in thresholded mode
       if (contours && !showThresholded) {
         noStroke();
         for (var i = 0; i < contours.size(); i++) {
@@ -221,10 +234,16 @@ function draw() {
 
           // free contour Mat
           contour.delete();
+          objectCount++; // Count each bounding box drawn
         }
         // free contours structures
         hierarchy.delete();
         contours.delete();
+      }
+      
+      // Update object count display
+      if (this.contourCountDiv) {
+        this.contourCountDiv.html('Objects: ' + objectCount);
       }
     } catch (error) {
       console.error('OpenCV processing error:', error);
