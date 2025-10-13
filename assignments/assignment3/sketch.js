@@ -10,6 +10,8 @@ let showThresholded = false;
 // UI element references
 let blurSlider, thresholdSlider;
 let objectCountDiv;
+let birthDiv, deathDiv;
+let sweepIndicator;
 
 // Audio
 let customOscillator;
@@ -19,6 +21,13 @@ let currentObjectCount = 0;
 
 // Bounding box tracking
 let activeBoxes = [];
+let smoothedBirth = 0;
+let smoothedDeath = 0;
+let previousSmoothedBirth = 0;
+let birthDelta = 0;
+let sweepOsc;
+let sweepStartTime;
+let sweepActive = false;
 
 class BoundingBox {
   constructor(x, y, w, h) {
@@ -76,11 +85,17 @@ function setup() {
     harmonicOscillators.push(osc);
   }
   
+  // Create sweep oscillator
+  sweepOsc = new p5.Oscillator();
+  sweepOsc.setType('sine');
+  sweepOsc.amp(0);
+  
   // Ask user to enable sound
   setTimeout(() => {
     let enableSound = confirm("Enable sound?");
     if (enableSound) {
       harmonicOscillators.forEach(osc => osc.start());
+      sweepOsc.start();
     }
   }, 1000);
   
@@ -141,10 +156,41 @@ function setup() {
   contourCountDiv.style('padding', '5px 10px');
   contourCountDiv.style('border-radius', '4px');
 
+  let birthDiv = createDiv('Birth Delta: 0');
+  birthDiv.position(10, 165);
+  birthDiv.style('color', '#0f0');
+  birthDiv.style('font-size', '14px');
+  birthDiv.style('font-family', 'sans-serif');
+  birthDiv.style('background', 'rgba(0,0,0,0.7)');
+  birthDiv.style('padding', '5px 10px');
+  birthDiv.style('border-radius', '4px');
+
+  let deathDiv = createDiv('Death: 0');
+  deathDiv.position(10, 195);
+  deathDiv.style('color', '#f00');
+  deathDiv.style('font-size', '14px');
+  deathDiv.style('font-family', 'sans-serif');
+  deathDiv.style('background', 'rgba(0,0,0,0.7)');
+  deathDiv.style('padding', '5px 10px');
+  deathDiv.style('border-radius', '4px');
+
+  let sweepIndicator = createDiv('SWEEP!');
+  sweepIndicator.position(width / 2 - 50, height / 2 - 25);
+  sweepIndicator.style('color', '#ff0');
+  sweepIndicator.style('font-size', '24px');
+  sweepIndicator.style('font-family', 'sans-serif');
+  sweepIndicator.style('background', 'rgba(255,0,0,0.8)');
+  sweepIndicator.style('padding', '10px 20px');
+  sweepIndicator.style('border-radius', '8px');
+  sweepIndicator.style('display', 'none'); // Hidden by default
+
   // Store references for use in draw()
   this.blurSlider = blurSlider;
   this.thresholdSlider = thresholdSlider;
   this.contourCountDiv = contourCountDiv;
+  this.birthDiv = birthDiv;
+  this.deathDiv = deathDiv;
+  this.sweepIndicator = sweepIndicator;
 
   // Set up event handlers
   blurSlider.input(() => {
@@ -234,6 +280,7 @@ function draw() {
   capture.loadPixels();
   if (capture.pixels && capture.pixels.length > 0) {
     try {
+      let oldBoxesCount;
       // copy pixel data into OpenCV Mat
       captureMat.data.set(capture.pixels);
 
@@ -279,6 +326,7 @@ function draw() {
       
       // Match new boxes to active boxes
       let matched = new Set();
+      oldBoxesCount = activeBoxes.length;
       for (let newBox of newBoxes) {
         let bestMatch = null;
         let bestIoU = 0;
@@ -299,6 +347,46 @@ function draw() {
       
       // Remove old boxes (not seen for 30 frames)
       activeBoxes = activeBoxes.filter(box => frameCount - box.lastSeen < 30);
+      
+      // Calculate birth and death rates
+      let matchedCount = matched.size;
+      let removedCount = oldBoxesCount - matchedCount;
+      let createdCount = newBoxes.length - matchedCount;
+      
+      // Apply exponential smoothing to rates
+      let alpha = 0.1; // Smoothing factor (lower = more smoothing)
+      smoothedBirth = alpha * createdCount + (1 - alpha) * smoothedBirth;
+      smoothedDeath = alpha * removedCount + (1 - alpha) * smoothedDeath;
+      
+      // Calculate birth rate delta
+      birthDelta = smoothedBirth - previousSmoothedBirth;
+      previousSmoothedBirth = smoothedBirth;
+      
+      // Trigger sine sweep when birth delta jumps above 5
+      if (birthDelta > 5 && !sweepActive) {
+        sweepActive = true;
+        sweepStartTime = millis();
+        sweepOsc.freq(1000); // Start at 1kHz
+        sweepOsc.amp(0.5);
+      }
+      
+      // Update sweep oscillator
+      if (sweepActive) {
+        let elapsed = millis() - sweepStartTime;
+        if (elapsed < 1000) {
+          let k = Math.log(1000) / 1000; // Exponential decay constant for 1kHz to 20Hz
+          let freq = 1000 * Math.exp(-elapsed * k);
+          sweepOsc.freq(Math.max(freq, 20)); // Prevent going below 20Hz
+        } else {
+          sweepOsc.amp(0);
+          sweepActive = false;
+        }
+      }
+      
+      // Update visual feedback
+      if (this.sweepIndicator) {
+        this.sweepIndicator.style('display', sweepActive ? 'block' : 'none');
+      }
       
       // Draw all bounding boxes
       for (let box of activeBoxes) {
@@ -326,6 +414,12 @@ function draw() {
       if (this.contourCountDiv) {
         this.contourCountDiv.html('Objects: ' + objectCount);
         updateHarmonics(objectCount);
+      }
+      if (this.birthDiv) {
+        this.birthDiv.html('Birth Delta: ' + birthDelta.toFixed(1));
+      }
+      if (this.deathDiv) {
+        this.deathDiv.html('Death: ' + smoothedDeath.toFixed(1));
       }
     } catch (error) {
       console.error('OpenCV processing error:', error);
