@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>p5.js + OpenCV.js Example</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.2/p5.js"></script>
+    <!-- Load OpenCV.js -->
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady();"></script>
+    <script src="sketch.js"></script>
+  </head>
+  <body>
+    <h3 style="font-family: sans-serif;">Contour Detection Example</h3>
+    <div id="status">Loading OpenCV...</div>
+    <div style="margin: 10px 0;">
+      <label>Blur Radius: <input type="range" id="blurRadius" min="0" max="100" value="10"></label>
+      <span id="blurValue">1</span>px
+    </div>
+    <div style="margin: 10px 0;">
+      <label>Threshold: <input type="range" id="threshold" min="0" max="100" value="50"></label>
+      <span id="thresholdValue">127</span>
+    </div>
+    <div style="margin: 10px 0;">
+      <label><input type="checkbox" id="showThresholded"> Show Thresholded</label>
+    </div>
+  </body>
+</html>
