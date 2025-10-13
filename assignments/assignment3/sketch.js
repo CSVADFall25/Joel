@@ -5,16 +5,17 @@ let capture;
 let src, dst;
 let cap;
 let ready = false;
-var w = 640;
-var h = 480;
 let showThresholded = false;
+
+// UI element references
+let blurSlider, thresholdSlider;
 
 
 
 function setup() {
-  createCanvas(w, h);
+  createCanvas(windowWidth, windowHeight);
   capture = createCapture(VIDEO);
-  capture.size(w, h);
+  capture.size(width, height);
   capture.hide();
   capture.elt.setAttribute('playsinline', '');
   
@@ -23,28 +24,72 @@ function setup() {
     console.log('Video metadata loaded');
   });
   
-  // Setup UI controls
-  let blurSlider = select('#blurRadius');
-  let thresholdSlider = select('#threshold');
-  let thresholdCheckbox = select('#showThresholded');
-  
-  if (blurSlider) {
-    blurSlider.input(function() {
-      select('#blurValue').html(map(blurSlider.value(), 0, 100, 1, 10).toFixed(1));
-    });
-  }
-  
-  if (thresholdSlider) {
-    thresholdSlider.input(function() {
-      select('#thresholdValue').html(map(thresholdSlider.value(), 0, 100, 0, 255).toFixed(0));
-    });
-  }
-  
-  if (thresholdCheckbox) {
-    thresholdCheckbox.changed(function() {
-      showThresholded = thresholdCheckbox.checked();
-    });
-  }
+  // Create UI controls within the canvas
+  let titleDiv = createDiv('Contour Detection Example');
+  titleDiv.position(10, 10);
+  titleDiv.style('color', '#fff');
+  titleDiv.style('font-size', '18px');
+  titleDiv.style('font-family', 'sans-serif');
+  titleDiv.style('background', 'rgba(0,0,0,0.7)');
+  titleDiv.style('padding', '5px 10px');
+  titleDiv.style('border-radius', '4px');
+
+  let blurLabel = createDiv('Blur Radius:');
+  blurLabel.position(10, 45);
+  blurLabel.style('color', '#fff');
+  blurLabel.style('font-size', '14px');
+  blurLabel.style('font-family', 'sans-serif');
+
+  let blurSlider = createSlider(0, 100, 10);
+  blurSlider.position(120, 45);
+  blurSlider.style('width', '200px');
+
+  let blurValue = createDiv('1.0px');
+  blurValue.position(330, 45);
+  blurValue.style('color', '#fff');
+  blurValue.style('font-size', '14px');
+  blurValue.style('font-family', 'sans-serif');
+
+  let thresholdLabel = createDiv('Threshold:');
+  thresholdLabel.position(10, 75);
+  thresholdLabel.style('color', '#fff');
+  thresholdLabel.style('font-size', '14px');
+  thresholdLabel.style('font-family', 'sans-serif');
+
+  let thresholdSlider = createSlider(0, 100, 50);
+  thresholdSlider.position(120, 75);
+  thresholdSlider.style('width', '200px');
+
+  let thresholdValue = createDiv('127');
+  thresholdValue.position(330, 75);
+  thresholdValue.style('color', '#fff');
+  thresholdValue.style('font-size', '14px');
+  thresholdValue.style('font-family', 'sans-serif');
+
+  let thresholdCheckbox = createCheckbox(' Show Thresholded', false);
+  thresholdCheckbox.position(10, 105);
+  thresholdCheckbox.style('color', '#fff');
+  thresholdCheckbox.style('font-size', '14px');
+  thresholdCheckbox.style('font-family', 'sans-serif');
+
+  // Store references for use in draw()
+  this.blurSlider = blurSlider;
+  this.thresholdSlider = thresholdSlider;
+
+  // Set up event handlers
+  blurSlider.input(() => {
+    let val = map(blurSlider.value(), 0, 100, 1, 10);
+    blurValue.html(val.toFixed(1) + 'px');
+  });
+
+  thresholdSlider.input(() => {
+    let val = map(thresholdSlider.value(), 0, 100, 0, 255);
+    thresholdValue.html(Math.round(val).toString());
+  });
+
+  thresholdCheckbox.changed(() => {
+    showThresholded = thresholdCheckbox.checked();
+  });
 }
 
 var captureMat, gray, blurred, thresholded;
@@ -69,12 +114,19 @@ function cvSetup() {
 }
 
 function initMats() {
-  console.log('Initializing Mats');
+  console.log('Initializing Mats with dimensions:', width, height);
+  
+  // Clean up existing Mats if they exist
+  if (captureMat && !captureMat.isDeleted()) captureMat.delete();
+  if (gray && !gray.isDeleted()) gray.delete();
+  if (blurred && !blurred.isDeleted()) blurred.delete();
+  if (thresholded && !thresholded.isDeleted()) thresholded.delete();
+  
   // cv.Mat(rows, cols, type)
-  captureMat = new cv.Mat(h, w, cv.CV_8UC4);
-  gray = new cv.Mat(h, w, cv.CV_8UC1);
-  blurred = new cv.Mat(h, w, cv.CV_8UC1);
-  thresholded = new cv.Mat(h, w, cv.CV_8UC1);
+  captureMat = new cv.Mat(height, width, cv.CV_8UC4);
+  gray = new cv.Mat(height, width, cv.CV_8UC1);
+  blurred = new cv.Mat(height, width, cv.CV_8UC1);
+  thresholded = new cv.Mat(height, width, cv.CV_8UC1);
 }
 
 function onOpenCvReady() {
@@ -106,7 +158,7 @@ function draw() {
   background(0);
   
   // Display the video feed
-  image(capture, 0, 0, w, h);
+  image(capture, 0, 0, width, height);
   
   // Only process if we have pixels
   capture.loadPixels();
@@ -115,10 +167,10 @@ function draw() {
       // copy pixel data into OpenCV Mat
       captureMat.data.set(capture.pixels);
 
-      var blurRadius = select('#blurRadius') ? select('#blurRadius').value() : 1;
+      var blurRadius = this.blurSlider ? this.blurSlider.value() : 10;
       blurRadius = map(blurRadius, 0, 100, 1, 10);
 
-      var threshold = select('#threshold') ? select('#threshold').value() : 50;
+      var threshold = this.thresholdSlider ? this.thresholdSlider.value() : 50;
       threshold = map(threshold, 0, 100, 0, 255);
 
       // use OpenCV.js constants
@@ -139,7 +191,7 @@ function draw() {
         }
         capture.updatePixels();
         // Redisplay the modified capture
-        image(capture, 0, 0, w, h);
+        image(capture, 0, 0, width, height);
       }
 
       contours = new cv.MatVector();
@@ -184,7 +236,13 @@ function draw() {
 }
 
 function windowResized() {
-  resizeCanvas(640, 480);
+  resizeCanvas(windowWidth, windowHeight);
+  if (capture) {
+    capture.size(width, height);
+  }
+  if (ready) {
+    initMats();
+  }
 }
 
 function cleanup() {
