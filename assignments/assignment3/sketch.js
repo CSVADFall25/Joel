@@ -11,12 +11,18 @@ let showThresholded = false;
 let blurSlider, thresholdSlider;
 let objectCountDiv;
 
+// Audio
+let customOscillator;
+let harmonicOscillators = [];
+let phase = 0;
+let currentObjectCount = 0;
+
 
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
   capture = createCapture(VIDEO);
-  capture.size(width, height);
+  capture.size(windowWidth, windowHeight);
   capture.hide();
   capture.elt.setAttribute('playsinline', '');
   
@@ -24,6 +30,24 @@ function setup() {
   capture.elt.addEventListener('loadedmetadata', function() {
     console.log('Video metadata loaded');
   });
+  
+    // Create multiple oscillators for harmonics
+  harmonicOscillators = [];
+  for (let i = 0; i < 10; i++) { // Support up to 10 harmonics (100 objects)
+    let osc = new p5.Oscillator();
+    osc.setType('sine');
+    osc.freq(41 * (i + 1)); // Harmonic frequencies
+    osc.amp(0); // Start silent
+    harmonicOscillators.push(osc);
+  }
+  
+  // Ask user to enable sound
+  setTimeout(() => {
+    let enableSound = confirm("Enable sound?");
+    if (enableSound) {
+      harmonicOscillators.forEach(osc => osc.start());
+    }
+  }, 1000);
   
   // Create UI controls within the canvas
   let titleDiv = createDiv('Contour Detection Example');
@@ -241,9 +265,10 @@ function draw() {
         contours.delete();
       }
       
-      // Update object count display
+      // Update object count display and audio
       if (this.contourCountDiv) {
         this.contourCountDiv.html('Objects: ' + objectCount);
+        updateHarmonics(objectCount);
       }
     } catch (error) {
       console.error('OpenCV processing error:', error);
@@ -267,4 +292,18 @@ function windowResized() {
 function cleanup() {
   if (src && !src.isDeleted()) src.delete();
   if (dst && !dst.isDeleted()) dst.delete();
+}
+
+function updateHarmonics(objectCount) {
+  let numHarmonics = 1 + Math.floor(objectCount / 10);
+  
+  for (let i = 0; i < harmonicOscillators.length; i++) {
+    if (i < numHarmonics) {
+      // Calculate amplitude: each harmonic is 1/3 the amplitude of the previous
+      let amplitude = 0.2 * Math.pow(1/3, i);
+      harmonicOscillators[i].amp(amplitude, 0.1); // Smooth transition
+    } else {
+      harmonicOscillators[i].amp(0, 0.1); // Fade out unused harmonics
+    }
+  }
 }
