@@ -229,8 +229,11 @@ function repositionAudioPlayers() {
     }
     
     // Allow UI to use full canvas space (with small margins for visibility)
-    x = constrain(x, 20, width - 300);
-    y = constrain(y, 100, height - 100);
+    // Use smaller margins for minimized circles
+    const marginX = playerData.ui.minimized ? 30 : 20;
+    const marginY = playerData.ui.minimized ? 80 : 100;
+    x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
+    y = constrain(y, marginY, height - (playerData.ui.minimized ? 50 : 100));
     
     playerData.ui.x = x;
     playerData.ui.y = y;
@@ -406,7 +409,16 @@ function drawSongStructure() {
 
 function drawAudioPlayers() {
   // Draw all audio player UIs
+  // Automatically minimize UIs that are not currently playing
+  const currentlyPlayingFile = audioManager.currentPlayingAudio;
+  
   audioPlayerUIs.forEach(playerData => {
+    // Minimize UI if it's not the currently playing audio and not starting playback
+    if ((!currentlyPlayingFile || playerData.audioFile !== currentlyPlayingFile) && !playerData.ui.isStartingPlayback) {
+      playerData.ui.minimize();
+    }
+    // The currently playing UI or UI starting playback will be expanded
+    
     playerData.ui.draw(playerData.audioFile);
   });
 }
