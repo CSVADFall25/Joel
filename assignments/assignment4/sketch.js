@@ -142,53 +142,123 @@ function onModeChange() {
 }
 
 async function initializeApp() {
-  console.log('Initializing EssentiaTest app...');
+  console.log('🚀 Initializing EssentiaTest app...');
   
   try {
     // Initialize Essentia analyzer
+    console.log('⏳ Initializing Essentia analyzer...');
     await essentiaAnalyzer.initialize();
+    console.log('✅ Essentia initialized');
     
     // Load audio dataset
+    console.log('⏳ Loading audio dataset...');
     const audioFiles = await audioManager.loadAudioDataset();
+    console.log(`✅ Loaded ${audioFiles.length} audio files`);
     
-    // Analyze audio files and create UI components
-    await analyzeAndCreateUIComponents(audioFiles);
+    // Process first file synchronously to show initial UI
+    console.log('⏳ Processing first audio file...');
+    await processFirstAudioFile(audioFiles);
     
+    // Show the UI after first file is ready
     isLoading = false;
-    console.log('App initialization complete');
+    console.log('✅ UI ready - processing remaining files in background...');
+    
+    // Process remaining files asynchronously
+    processRemainingAudioFiles(audioFiles);
     
   } catch (error) {
-    console.error('Error initializing app:', error);
+    console.error('❌ Error initializing app:', error);
     isLoading = false;
   }
 }
 
-async function analyzeAndCreateUIComponents(audioFiles) {
+async function processFirstAudioFile(audioFiles) {
+  // Initialize the array
   audioPlayerUIs = [];
   
-  for (let i = 0; i < audioFiles.length; i++) {
-    const audioFile = audioFiles[i];
-    
-    console.log(`Analyzing ${audioFile.name}...`);
-    
-    // Load audio buffer for Essentia analysis
+  if (audioFiles.length === 0) return;
+  
+  const audioFile = audioFiles[0];
+  console.log(`🔄 Analyzing first file: ${audioFile.name}...`);
+  
+  try {
+    // Load audio buffer
     const audioBuffer = await audioManager.loadAudioBuffer(audioFile);
     
-    // Analyze with Essentia (will use mock if buffer loading fails)
+    // Analyze with Essentia
     audioFile.analysis = await essentiaAnalyzer.analyzeAudio(audioBuffer);
+    console.log(`✅ First file analyzed:`, audioFile.analysis);
     
-    console.log(`Analysis complete for ${audioFile.name}:`, audioFile.analysis);
-    
-    // Create UI component for this audio file
+    // Create UI component
     const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
     audioPlayerUIs.push({
       ui: ui,
       audioFile: audioFile,
-      visualPosition: { x: 0, y: 0 }
+      visualPosition: { x: width / 2, y: height / 2 }
     });
+    
+    // Position the first element
+    repositionAudioPlayers();
+    
+  } catch (error) {
+    console.error(`❌ Error processing first file:`, error);
+    // Use mock analysis as fallback
+    audioFile.analysis = essentiaAnalyzer.generateMockAnalysis();
+    
+    const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
+    audioPlayerUIs.push({
+      ui: ui,
+      audioFile: audioFile,
+      visualPosition: { x: width / 2, y: height / 2 }
+    });
+    repositionAudioPlayers();
+  }
+}
+
+async function processRemainingAudioFiles(audioFiles) {
+  // Process remaining files one at a time (skipping first)
+  for (let i = 1; i < audioFiles.length; i++) {
+    const audioFile = audioFiles[i];
+    
+    try {
+      console.log(`🔄 [${i}/${audioFiles.length - 1}] Analyzing: ${audioFile.name}...`);
+      
+      // Load and analyze (this happens in background)
+      const audioBuffer = await audioManager.loadAudioBuffer(audioFile);
+      audioFile.analysis = await essentiaAnalyzer.analyzeAudio(audioBuffer);
+      
+      console.log(`✅ [${i}/${audioFiles.length - 1}] Complete: ${audioFile.name}`);
+      
+      // Create UI component
+      const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
+      audioPlayerUIs.push({
+        ui: ui,
+        audioFile: audioFile,
+        visualPosition: { x: width / 2, y: height / 2 }
+      });
+      
+      // Reposition all elements with the new addition
+      repositionAudioPlayers();
+      
+      // Small delay to keep UI responsive
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+    } catch (error) {
+      console.error(`❌ Error processing ${audioFile.name}:`, error);
+      // Use mock analysis as fallback
+      audioFile.analysis = essentiaAnalyzer.generateMockAnalysis();
+      
+      const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
+      audioPlayerUIs.push({
+        ui: ui,
+        audioFile: audioFile,
+        visualPosition: { x: width / 2, y: height / 2 }
+      });
+      repositionAudioPlayers();
+    }
   }
   
-  repositionAudioPlayers();
+  console.log('🎉 All audio files processed!');
 }
 
 function repositionAudioPlayers() {
