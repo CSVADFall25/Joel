@@ -63,12 +63,12 @@ function createModeSelector() {
   dropdownButton.style('border', `1px solid ${colors.primary}`);
   dropdownButton.style('border-radius', '4px');
   dropdownButton.style('font-family', 'Arial, sans-serif');
-  dropdownButton.style('padding', '8px 12px');
+  dropdownButton.style('padding', '8px');
   dropdownButton.style('outline', 'none');
   dropdownButton.style('cursor', 'pointer');
-  dropdownButton.style('min-width', '180px');
   dropdownButton.style('text-align', 'left');
   dropdownButton.style('transition', 'all 0.3s ease');
+  dropdownButton.style('white-space', 'nowrap');
 
   // Create dropdown menu (hidden initially)
   let dropdownMenu = createDiv('');
@@ -80,9 +80,9 @@ function createModeSelector() {
   dropdownMenu.style('background-color', colors.surface);
   dropdownMenu.style('border', `1px solid ${colors.primary}`);
   dropdownMenu.style('border-radius', '4px');
-  dropdownMenu.style('min-width', '180px');
   dropdownMenu.style('z-index', '1001');
   dropdownMenu.style('box-shadow', '0 4px 8px rgba(0,0,0,0.3)');
+  dropdownMenu.style('white-space', 'nowrap');
 
   // Create menu options
   const modes = [
@@ -210,28 +210,50 @@ function repositionAudioPlayers() {
       switch (visualMode) {
         case 'energy-mood':
           // Map energy (0-1) to X axis, mood (0-1) to Y axis
-          // Use full available width/height
-          x = centerX + (analysis.energy - 0.5) * (availableWidth * 0.8);
-          y = centerY - (analysis.mood - 0.5) * (availableHeight * 0.8); // Invert Y for intuitive mapping
+          // Constrain to grid space (80% of available space)
+          const gridWidth = availableWidth * 0.8;
+          const gridHeight = availableHeight * 0.8;
           
-          // Add small random offset to prevent exact overlaps
+          x = centerX + (analysis.energy - 0.5) * gridWidth;
+          y = centerY - (analysis.mood - 0.5) * gridHeight; // Invert Y for intuitive mapping
+          
+          // Add small random offset to prevent exact overlaps, but stay within grid
           if (attempts > 0) {
             x += (Math.random() - 0.5) * 60 * attempts;
             y += (Math.random() - 0.5) * 60 * attempts;
           }
+          
+          // Always constrain to grid boundaries, accounting for UI element size
+          const uiMarginX = playerData.ui.minimized ? 25 : 140; // radius or half width
+          const uiMarginY = playerData.ui.minimized ? 25 : 40;  // radius or half height
+          x = constrain(x, centerX - gridWidth/2 + uiMarginX, centerX + gridWidth/2 - uiMarginX);
+          y = constrain(y, centerY - gridHeight/2 + uiMarginY, centerY + gridHeight/2 - uiMarginY);
           break;
           
         case 'circle-of-fifths':
-          const coords = essentiaAnalyzer.getCircleOfFifthsCoordinates(analysis.key, maxRadius);
-          x = centerX + coords.x;
-          y = centerY + coords.y;
+          // Get key position (0-11)
+          const keyPosition = essentiaAnalyzer.keyToCirclePosition(analysis.key);
+          const sliceAngle = TWO_PI / 12;
+          const baseAngle = (keyPosition * sliceAngle) - PI/2;
           
-          // Add small random offset to prevent exact overlaps
+          // Place UI element within pie slice, not too far out (to avoid obscuring key label)
+          const minRadius = maxRadius * 0.2; // Inner boundary
+          const maxRadiusForUI = maxRadius * 0.7; // Outer boundary (before key labels)
+          const randomRadius = minRadius + Math.random() * (maxRadiusForUI - minRadius);
+          
+          // Random angle within the slice (with some padding)
+          const slicePadding = sliceAngle * 0.1;
+          const randomAngle = baseAngle + (Math.random() - 0.5) * (sliceAngle - slicePadding * 2);
+          
+          x = centerX + cos(randomAngle) * randomRadius;
+          y = centerY + sin(randomAngle) * randomRadius;
+          
+          // Add offset on subsequent attempts
           if (attempts > 0) {
-            const offsetRadius = 40 * attempts;
-            const offsetAngle = Math.random() * TWO_PI;
-            x += cos(offsetAngle) * offsetRadius;
-            y += sin(offsetAngle) * offsetRadius;
+            const offsetRadius = 30 * attempts;
+            const offsetAngle = randomAngle + (Math.random() - 0.5) * sliceAngle * 0.5;
+            x = centerX + cos(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
+            y = centerY + sin(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
           }
           break;
           
@@ -246,13 +268,16 @@ function repositionAudioPlayers() {
           y = 100 + Math.floor(index / 3) * 100;
       }
       
-      // Allow UI to use full canvas space (with small margins for visibility)
-      // Use smaller margins for minimized circles
-      const marginX = playerData.ui.minimized ? 30 : 20;
-      const marginY = playerData.ui.minimized ? 80 : 100;
-      const bottomMargin = visualMode === 'song-structure' ? 120 : (playerData.ui.minimized ? 50 : 100);
-      x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
-      y = constrain(y, marginY, height - bottomMargin);
+      // Constrain UI position based on visualization mode
+      // For energy-mood and circle-of-fifths, positions are already constrained above
+      // Only apply general canvas constraints for song-structure and default modes
+      if (visualMode === 'song-structure' || visualMode === 'default') {
+        const marginX = playerData.ui.minimized ? 30 : 20;
+        const marginY = playerData.ui.minimized ? 80 : 100;
+        const bottomMargin = visualMode === 'song-structure' ? 120 : (playerData.ui.minimized ? 50 : 100);
+        x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
+        y = constrain(y, marginY, height - bottomMargin);
+      }
       
       attempts++;
       
@@ -384,14 +409,14 @@ function drawEnergyMoodGrid() {
     }
   }
   
-  // Labels
+  // Labels (positioned outside the grid)
   fill(colors.text);
   textAlign(CENTER);
   textSize(12);
-  text('Low Energy', -gridWidth/3, 20);
-  text('High Energy', gridWidth/3, 20);
-  text('Sad', -20, -gridHeight/3);
-  text('Happy', -20, gridHeight/3);
+  text('Low Energy', -gridWidth/2 - 60, 0);
+  text('High Energy', gridWidth/2 + 60, 0);
+  text('Sad', 0, gridHeight/2 + 30);
+  text('Happy', 0, -gridHeight/2 - 30);
 }
 
 function drawCircleOfFifths() {
@@ -400,17 +425,30 @@ function drawCircleOfFifths() {
   const availableHeight = height - 120;
   const maxRadius = Math.min(availableWidth, availableHeight) / 2 * 0.9;
   
+  // Draw pie slices
+  const keys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'G#', 'D#', 'A#', 'F'];
+  const sliceAngle = TWO_PI / 12;
+  
+  for(let i = 0; i < keys.length; i++) {
+    let angle = (i * sliceAngle) - PI/2;
+    
+    // Draw slice lines from center to edge
+    stroke(colors.textMuted);
+    strokeWeight(1);
+    let x1 = cos(angle) * maxRadius;
+    let y1 = sin(angle) * maxRadius;
+    line(0, 0, x1, y1);
+  }
+  
+  // Draw outer circle
   stroke(colors.secondary);
   strokeWeight(2);
   noFill();
-  
-  // Draw circle
   circle(0, 0, maxRadius * 2);
   
   // Draw key positions
-  const keys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'G#', 'D#', 'A#', 'F'];
   for(let i = 0; i < keys.length; i++) {
-    let angle = (i * TWO_PI / 12) - PI/2;
+    let angle = (i * sliceAngle) - PI/2;
     let x = cos(angle) * maxRadius;
     let y = sin(angle) * maxRadius;
     
@@ -456,11 +494,11 @@ function drawSongStructure() {
     textSize(16);
     text(categories[i], x, y + 6);
     
-    // Draw vertical line to separate columns
+    // Draw vertical line to separate columns (centered between containers)
     if (i < categories.length - 1) {
       stroke(colors.primary);
       strokeWeight(1);
-      line(x + categoryWidth/2 - 10, y - categoryHeight/2, x + categoryWidth/2 - 10, availableHeight/2);
+      line(x + categoryWidth/2, y - categoryHeight/2, x + categoryWidth/2, availableHeight/2);
     }
   }
 }
