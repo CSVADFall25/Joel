@@ -202,44 +202,92 @@ function repositionAudioPlayers() {
     if (!analysis) return;
     
     let x, y;
+    let attempts = 0;
+    const maxAttempts = 50; // Limit attempts to prevent infinite loops
     
-    switch (visualMode) {
-      case 'energy-mood':
-        // Map energy (0-1) to X axis, mood (0-1) to Y axis
-        // Use full available width/height
-        x = centerX + (analysis.energy - 0.5) * (availableWidth * 0.8);
-        y = centerY - (analysis.mood - 0.5) * (availableHeight * 0.8); // Invert Y for intuitive mapping
-        break;
-        
-      case 'circle-of-fifths':
-        const coords = essentiaAnalyzer.getCircleOfFifthsCoordinates(analysis.key, maxRadius);
-        x = centerX + coords.x;
-        y = centerY + coords.y;
-        break;
-        
-      case 'song-structure':
-        const structCoords = essentiaAnalyzer.getStructureCoordinates(analysis.structure, availableWidth, availableHeight);
-        x = centerX + structCoords.x;
-        y = centerY + structCoords.y;
-        break;
-        
-      default:
-        x = 50 + (index % 3) * 300;
-        y = 100 + Math.floor(index / 3) * 100;
-    }
-    
-    // Allow UI to use full canvas space (with small margins for visibility)
-    // Use smaller margins for minimized circles
-    const marginX = playerData.ui.minimized ? 30 : 20;
-    const marginY = playerData.ui.minimized ? 80 : 100;
-    const bottomMargin = visualMode === 'song-structure' ? 120 : (playerData.ui.minimized ? 50 : 100);
-    x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
-    y = constrain(y, marginY, height - bottomMargin);
+    // Keep trying to find a non-overlapping position
+    do {
+      switch (visualMode) {
+        case 'energy-mood':
+          // Map energy (0-1) to X axis, mood (0-1) to Y axis
+          // Use full available width/height
+          x = centerX + (analysis.energy - 0.5) * (availableWidth * 0.8);
+          y = centerY - (analysis.mood - 0.5) * (availableHeight * 0.8); // Invert Y for intuitive mapping
+          
+          // Add small random offset to prevent exact overlaps
+          if (attempts > 0) {
+            x += (Math.random() - 0.5) * 60 * attempts;
+            y += (Math.random() - 0.5) * 60 * attempts;
+          }
+          break;
+          
+        case 'circle-of-fifths':
+          const coords = essentiaAnalyzer.getCircleOfFifthsCoordinates(analysis.key, maxRadius);
+          x = centerX + coords.x;
+          y = centerY + coords.y;
+          
+          // Add small random offset to prevent exact overlaps
+          if (attempts > 0) {
+            const offsetRadius = 40 * attempts;
+            const offsetAngle = Math.random() * TWO_PI;
+            x += cos(offsetAngle) * offsetRadius;
+            y += sin(offsetAngle) * offsetRadius;
+          }
+          break;
+          
+        case 'song-structure':
+          const structCoords = essentiaAnalyzer.getStructureCoordinates(analysis.structure, availableWidth, availableHeight);
+          x = centerX + structCoords.x;
+          y = centerY + structCoords.y;
+          break;
+          
+        default:
+          x = 50 + (index % 3) * 300;
+          y = 100 + Math.floor(index / 3) * 100;
+      }
+      
+      // Allow UI to use full canvas space (with small margins for visibility)
+      // Use smaller margins for minimized circles
+      const marginX = playerData.ui.minimized ? 30 : 20;
+      const marginY = playerData.ui.minimized ? 80 : 100;
+      const bottomMargin = visualMode === 'song-structure' ? 120 : (playerData.ui.minimized ? 50 : 100);
+      x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
+      y = constrain(y, marginY, height - bottomMargin);
+      
+      attempts++;
+      
+    } while (checkOverlap(playerData, x, y) && attempts < maxAttempts);
     
     playerData.ui.x = x;
     playerData.ui.y = y;
     playerData.visualPosition = { x, y };
   });
+}
+
+// Check if a player would overlap with any existing players at the given position
+function checkOverlap(currentPlayerData, newX, newY) {
+  const minDistance = currentPlayerData.ui.minimized ? 60 : 150; // Minimum distance between UI elements
+  
+  for (let otherPlayerData of audioPlayerUIs) {
+    // Skip checking against self
+    if (otherPlayerData === currentPlayerData) continue;
+    
+    // Skip if other player doesn't have a position yet
+    if (!otherPlayerData.visualPosition) continue;
+    
+    const dx = newX - otherPlayerData.visualPosition.x;
+    const dy = newY - otherPlayerData.visualPosition.y;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    
+    // Adjust minimum distance based on whether players are minimized
+    const adjustedMinDistance = (currentPlayerData.ui.minimized && otherPlayerData.ui.minimized) ? 60 : 150;
+    
+    if (distance < adjustedMinDistance) {
+      return true; // Overlap detected
+    }
+  }
+  
+  return false; // No overlap
 }
 
 function drawLoadingScreen() {
