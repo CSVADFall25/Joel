@@ -35,7 +35,7 @@ class AudioManager {
       // Collect all audio files from all subdirectories
       let allAudioFiles = [];
       
-      for (const dir of subdirectories.slice(0, 5)) { // Limit to first 5 directories for demo
+      for (const dir of subdirectories) {
         try {
           console.log(`🔍 Exploring directory: ${dir.path}`);
           
