@@ -49,19 +49,91 @@ function windowResized() {
 }
 
 function createModeSelector() {
-  // Create dropdown for visualization modes
-  modeDropdown = createSelect();
-  modeDropdown.position(20, 20);
-  modeDropdown.option('Energy/Mood Grid', 'energy-mood');
-  modeDropdown.option('Circle of Fifths', 'circle-of-fifths');
-  modeDropdown.option('Song Structure', 'song-structure');
-  modeDropdown.selected('energy-mood');
-  modeDropdown.changed(onModeChange);
-  modeDropdown.style('background-color', colors.surface);
-  modeDropdown.style('color', colors.text);
-  modeDropdown.style('border', `1px solid ${colors.primary}`);
-  modeDropdown.style('font-family', 'Arial, sans-serif');
-  modeDropdown.style('padding', '8px');
+  // Create custom dropdown container
+  let dropdownContainer = createDiv('');
+  dropdownContainer.position(20, 20);
+  dropdownContainer.style('z-index', '1000');
+  dropdownContainer.style('position', 'absolute');
+
+  // Create dropdown button
+  let dropdownButton = createButton('Energy/Mood Grid ▼');
+  dropdownButton.parent(dropdownContainer);
+  dropdownButton.style('background-color', colors.surface);
+  dropdownButton.style('color', colors.text);
+  dropdownButton.style('border', `1px solid ${colors.primary}`);
+  dropdownButton.style('border-radius', '4px');
+  dropdownButton.style('font-family', 'Arial, sans-serif');
+  dropdownButton.style('padding', '8px 12px');
+  dropdownButton.style('outline', 'none');
+  dropdownButton.style('cursor', 'pointer');
+  dropdownButton.style('min-width', '180px');
+  dropdownButton.style('text-align', 'left');
+  dropdownButton.style('transition', 'all 0.3s ease');
+
+  // Create dropdown menu (hidden initially)
+  let dropdownMenu = createDiv('');
+  dropdownMenu.parent(dropdownContainer);
+  dropdownMenu.style('display', 'none');
+  dropdownMenu.style('position', 'absolute');
+  dropdownMenu.style('top', '100%');
+  dropdownMenu.style('left', '0');
+  dropdownMenu.style('background-color', colors.surface);
+  dropdownMenu.style('border', `1px solid ${colors.primary}`);
+  dropdownMenu.style('border-radius', '4px');
+  dropdownMenu.style('min-width', '180px');
+  dropdownMenu.style('z-index', '1001');
+  dropdownMenu.style('box-shadow', '0 4px 8px rgba(0,0,0,0.3)');
+
+  // Create menu options
+  const modes = [
+    { label: 'Energy/Mood Grid', value: 'energy-mood' },
+    { label: 'Circle of Fifths', value: 'circle-of-fifths' },
+    { label: 'Song Structure', value: 'song-structure' }
+  ];
+
+  modes.forEach(mode => {
+    let option = createDiv(mode.label);
+    option.parent(dropdownMenu);
+    option.style('padding', '8px 12px');
+    option.style('cursor', 'pointer');
+    option.style('color', colors.text);
+    option.style('border-bottom', mode.value !== 'song-structure' ? '1px solid #333' : 'none');
+    option.style('transition', 'background-color 0.2s ease');
+
+    option.mouseOver(() => {
+      option.style('background-color', colors.primary + '40');
+    });
+    option.mouseOut(() => {
+      option.style('background-color', 'transparent');
+    });
+
+    option.mousePressed(() => {
+      visualMode = mode.value;
+      dropdownButton.html(mode.label + ' ▼');
+      dropdownMenu.style('display', 'none');
+      repositionAudioPlayers();
+      console.log('Mode changed to:', mode.value);
+    });
+  });
+
+  // Toggle dropdown on button click
+  let isOpen = false;
+  dropdownButton.mousePressed(() => {
+    isOpen = !isOpen;
+    dropdownMenu.style('display', isOpen ? 'block' : 'none');
+    dropdownButton.html(dropdownButton.html().replace(isOpen ? '▼' : '▲', isOpen ? '▲' : '▼'));
+  });
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!dropdownContainer.elt.contains(e.target)) {
+      isOpen = false;
+      dropdownMenu.style('display', 'none');
+      dropdownButton.html(dropdownButton.html().replace('▲', '▼'));
+    }
+  });
+
+  console.log('Custom dropdown created successfully');
 }
 
 function onModeChange() {
