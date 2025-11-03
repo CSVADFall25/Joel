@@ -347,22 +347,25 @@ function positionSinglePlayer(playerData, index) {
         const sliceAngle = TWO_PI / 12;
         const baseAngle = (keyPosition * sliceAngle) - PI/2;
         
-        const minRadius = maxRadius * 0.2;
-        const maxRadiusForUI = maxRadius * 0.7;
-        const randomRadius = minRadius + Math.random() * (maxRadiusForUI - minRadius);
+        // Use keyStrength (confidence) to determine radius
+        const minRadius = maxRadius * 0.2; // Inner boundary (low confidence)
+        const maxRadiusForUI = maxRadius * 0.7; // Outer boundary (high confidence, before key labels)
+        const keyStrength = analysis.keyStrength || 0.5; // Default to 0.5 if missing
+        const confidenceRadius = minRadius + keyStrength * (maxRadiusForUI - minRadius);
         
+        // Add small random variation to angle within the slice
         const slicePadding = sliceAngle * 0.1;
         const randomAngle = baseAngle + (Math.random() - 0.5) * (sliceAngle - slicePadding * 2);
         
-        x = centerX + cos(randomAngle) * randomRadius;
-        y = centerY + sin(randomAngle) * randomRadius;
+        x = centerX + cos(randomAngle) * confidenceRadius;
+        y = centerY + sin(randomAngle) * confidenceRadius;
         
-        // Add offset on subsequent attempts
+        // Add offset on subsequent attempts (for overlap avoidance)
         if (attempts > 0) {
           const offsetRadius = 30 * attempts;
           const offsetAngle = randomAngle + (Math.random() - 0.5) * sliceAngle * 0.5;
-          x = centerX + cos(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
-          y = centerY + sin(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
+          x = centerX + cos(offsetAngle) * constrain(confidenceRadius + offsetRadius, minRadius, maxRadiusForUI);
+          y = centerY + sin(offsetAngle) * constrain(confidenceRadius + offsetRadius, minRadius, maxRadiusForUI);
         }
         break;
         
@@ -454,24 +457,25 @@ function repositionAudioPlayers() {
           const sliceAngle = TWO_PI / 12;
           const baseAngle = (keyPosition * sliceAngle) - PI/2;
           
-          // Place UI element within pie slice, not too far out (to avoid obscuring key label)
-          const minRadius = maxRadius * 0.2; // Inner boundary
-          const maxRadiusForUI = maxRadius * 0.7; // Outer boundary (before key labels)
-          const randomRadius = minRadius + Math.random() * (maxRadiusForUI - minRadius);
+          // Use keyStrength (confidence) to determine radius
+          const minRadius = maxRadius * 0.2; // Inner boundary (low confidence)
+          const maxRadiusForUI = maxRadius * 0.7; // Outer boundary (high confidence, before key labels)
+          const keyStrength = analysis.keyStrength || 0.5; // Default to 0.5 if missing
+          const confidenceRadius = minRadius + keyStrength * (maxRadiusForUI - minRadius);
           
-          // Random angle within the slice (with some padding)
+          // Add small random variation to angle within the slice
           const slicePadding = sliceAngle * 0.1;
           const randomAngle = baseAngle + (Math.random() - 0.5) * (sliceAngle - slicePadding * 2);
           
-          x = centerX + cos(randomAngle) * randomRadius;
-          y = centerY + sin(randomAngle) * randomRadius;
+          x = centerX + cos(randomAngle) * confidenceRadius;
+          y = centerY + sin(randomAngle) * confidenceRadius;
           
-          // Add offset on subsequent attempts
+          // Add offset on subsequent attempts (for overlap avoidance)
           if (attempts > 0) {
             const offsetRadius = 30 * attempts;
             const offsetAngle = randomAngle + (Math.random() - 0.5) * sliceAngle * 0.5;
-            x = centerX + cos(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
-            y = centerY + sin(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
+            x = centerX + cos(offsetAngle) * constrain(confidenceRadius + offsetRadius, minRadius, maxRadiusForUI);
+            y = centerY + sin(offsetAngle) * constrain(confidenceRadius + offsetRadius, minRadius, maxRadiusForUI);
           }
           break;
           
