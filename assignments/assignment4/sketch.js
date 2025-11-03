@@ -190,6 +190,11 @@ function repositionAudioPlayers() {
   const centerX = width / 2;
   const centerY = height / 2;
   
+  // Calculate available space (leave room for dropdown at top and UI at bottom)
+  const availableWidth = width - 40; // 20px margin on each side
+  const availableHeight = height - 120; // 80px for dropdown/top margin, 40px for bottom UI
+  const maxRadius = Math.min(availableWidth, availableHeight) / 2 * 0.9; // 90% of available space
+  
   audioPlayerUIs.forEach((playerData, index) => {
     const audioFile = playerData.audioFile;
     const analysis = audioFile.analysis;
@@ -201,18 +206,19 @@ function repositionAudioPlayers() {
     switch (visualMode) {
       case 'energy-mood':
         // Map energy (0-1) to X axis, mood (0-1) to Y axis
-        x = centerX + (analysis.energy - 0.5) * 400;
-        y = centerY - (analysis.mood - 0.5) * 300; // Invert Y for intuitive mapping
+        // Use full available width/height
+        x = centerX + (analysis.energy - 0.5) * (availableWidth * 0.8);
+        y = centerY - (analysis.mood - 0.5) * (availableHeight * 0.8); // Invert Y for intuitive mapping
         break;
         
       case 'circle-of-fifths':
-        const coords = essentiaAnalyzer.getCircleOfFifthsCoordinates(analysis.key, 200);
+        const coords = essentiaAnalyzer.getCircleOfFifthsCoordinates(analysis.key, maxRadius);
         x = centerX + coords.x;
         y = centerY + coords.y;
         break;
         
       case 'song-structure':
-        const structCoords = essentiaAnalyzer.getStructureCoordinates(analysis.structure);
+        const structCoords = essentiaAnalyzer.getStructureCoordinates(analysis.structure, availableWidth, availableHeight);
         x = centerX + structCoords.x;
         y = centerY + structCoords.y;
         break;
@@ -222,9 +228,9 @@ function repositionAudioPlayers() {
         y = 100 + Math.floor(index / 3) * 100;
     }
     
-    // Ensure UI stays within canvas bounds
-    x = constrain(x, 10, width - 290);
-    y = constrain(y, 80, height - 90);
+    // Allow UI to use full canvas space (with small margins for visibility)
+    x = constrain(x, 20, width - 300);
+    y = constrain(y, 100, height - 100);
     
     playerData.ui.x = x;
     playerData.ui.y = y;
@@ -297,20 +303,32 @@ function drawVisualizationMode() {
 }
 
 function drawEnergyMoodGrid() {
+  // Calculate available space for the grid
+  const availableWidth = width - 40;
+  const availableHeight = height - 120;
+  const gridWidth = availableWidth * 0.8;
+  const gridHeight = availableHeight * 0.8;
+  
   stroke(colors.primary);
   strokeWeight(1);
   
   // Draw grid axes
-  line(-200, 0, 200, 0); // Energy axis (horizontal)
-  line(0, -150, 0, 150); // Mood axis (vertical)
+  line(-gridWidth/2, 0, gridWidth/2, 0); // Energy axis (horizontal)
+  line(0, -gridHeight/2, 0, gridHeight/2); // Mood axis (vertical)
   
   // Grid lines
   strokeWeight(0.5);
   stroke(colors.textMuted);
-  for (let i = -150; i <= 150; i += 50) {
-    if (i !== 0) {
-      line(-200, i, 200, i);
-      line(i, -150, i, 150);
+  const stepX = gridWidth / 8;
+  const stepY = gridHeight / 6;
+  for (let i = -gridHeight/2; i <= gridHeight/2; i += stepY) {
+    if (Math.abs(i) > 1) {
+      line(-gridWidth/2, i, gridWidth/2, i);
+    }
+  }
+  for (let i = -gridWidth/2; i <= gridWidth/2; i += stepX) {
+    if (Math.abs(i) > 1) {
+      line(i, -gridHeight/2, i, gridHeight/2);
     }
   }
   
@@ -318,61 +336,71 @@ function drawEnergyMoodGrid() {
   fill(colors.text);
   textAlign(CENTER);
   textSize(12);
-  text('Low Energy', -150, 20);
-  text('High Energy', 150, 20);
-  text('Sad', -20, -130);
-  text('Happy', -20, 140);
+  text('Low Energy', -gridWidth/3, 20);
+  text('High Energy', gridWidth/3, 20);
+  text('Sad', -20, -gridHeight/3);
+  text('Happy', -20, gridHeight/3);
 }
 
 function drawCircleOfFifths() {
+  // Calculate available space for the circle
+  const availableWidth = width - 40;
+  const availableHeight = height - 120;
+  const maxRadius = Math.min(availableWidth, availableHeight) / 2 * 0.9;
+  
   stroke(colors.secondary);
   strokeWeight(2);
   noFill();
   
   // Draw circle
-  circle(0, 0, 400);
+  circle(0, 0, maxRadius * 2);
   
   // Draw key positions
   const keys = ['C', 'G', 'D', 'A', 'E', 'B', 'F#', 'C#', 'G#', 'D#', 'A#', 'F'];
   for(let i = 0; i < keys.length; i++) {
     let angle = (i * TWO_PI / 12) - PI/2;
-    let x = cos(angle) * 200;
-    let y = sin(angle) * 200;
+    let x = cos(angle) * maxRadius;
+    let y = sin(angle) * maxRadius;
     
     // Key background
     fill(colors.surface);
     stroke(colors.primary);
     strokeWeight(1);
-    circle(x, y, 30);
+    circle(x, y, Math.max(30, maxRadius * 0.15)); // Scale circle size with radius
     
     fill(colors.text);
     noStroke();
     textAlign(CENTER);
-    textSize(14);
+    textSize(Math.max(12, maxRadius * 0.075)); // Scale text size
     text(keys[i], x, y + 5);
   }
 }
 
 function drawSongStructure() {
+  // Calculate available space for structure categories
+  const availableWidth = width - 40;
+  const availableHeight = height - 120;
+  
   // Draw 5 categories
   const categories = ['Hook', 'Verse', 'Pre-Chorus', 'Chorus', 'Outro'];
-  const categoryWidth = 300;
-  const categoryHeight = 60;
+  const categoryWidth = availableWidth * 0.8;
+  const categoryHeight = Math.min(80, availableHeight / categories.length * 0.8);
+  const spacing = availableHeight / categories.length;
   
   for(let i = 0; i < categories.length; i++) {
     let x = -categoryWidth/2;
-    let y = (i - 2) * (categoryHeight + 20);
+    let y = (i - (categories.length - 1) / 2) * spacing;
     
     fill(colors.surface);
     stroke(colors.primary);
     strokeWeight(2);
-    rect(x, y, categoryWidth, categoryHeight, 8);
+    rect(x, y - categoryHeight/2, categoryWidth, categoryHeight, 8);
     
     fill(colors.text);
     noStroke();
     textAlign(CENTER);
-    textSize(16);
-    text(categories[i], 0, y + categoryHeight/2 + 6);
+    textSize(Math.max(14, categoryHeight * 0.3));
+    text(categories[i], 0, y + 6);
   }
 }
 

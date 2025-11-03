@@ -129,19 +129,19 @@ class EssentiaAnalyzer {
   }
 
   // Get category coordinates for song structure visualization
-  getStructureCoordinates(structure) {
+  getStructureCoordinates(structure, maxWidth = 600, maxHeight = 400) {
     const categories = ['hook', 'verse', 'pre-chorus', 'chorus', 'outro'];
     const categoryIndex = categories.indexOf(structure);
     
     if (categoryIndex === -1) return { x: 0, y: 0 };
     
-    const categoryWidth = 300;
-    const categoryHeight = 60;
-    const spacing = 20;
+    const categoryWidth = maxWidth * 0.8;
+    const categoryHeight = maxHeight / categories.length * 0.6;
+    const spacing = maxHeight / categories.length * 0.2;
     
     return {
       x: -categoryWidth/2 + Math.random() * categoryWidth,
-      y: (categoryIndex - 2) * (categoryHeight + spacing) + (Math.random() - 0.5) * categoryHeight * 0.8,
+      y: (categoryIndex - (categories.length - 1) / 2) * (categoryHeight + spacing) + (Math.random() - 0.5) * categoryHeight * 0.8,
       category: structure,
       categoryIndex: categoryIndex
     };
