@@ -5,6 +5,7 @@ class AudioManager {
     this.audioFiles = [];
     this.currentPlayingAudio = null;
     this.loadedAudioObjects = new Map();
+    this.audioContext = null; // Will be initialized when needed
   }
 
   // Load audio files from Hugging Face dataset
@@ -260,6 +261,35 @@ class AudioManager {
     } catch (error) {
       console.error('Error loading audio file:', error);
       return audioFile;
+    }
+  }
+
+  // Load audio buffer for analysis with Essentia
+  async loadAudioBuffer(audioFile) {
+    try {
+      console.log(`Loading audio buffer for analysis: ${audioFile.name}`);
+      
+      // Fetch the audio file as an ArrayBuffer
+      const response = await fetch(audioFile.url);
+      const arrayBuffer = await response.arrayBuffer();
+      
+      // Create audio context if not exists
+      if (!this.audioContext) {
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      
+      // Decode audio data
+      const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer);
+      
+      // Convert to mono and get channel data
+      const channelData = audioBuffer.getChannelData(0);
+      
+      // Convert Float32Array to regular array for Essentia
+      return Array.from(channelData);
+      
+    } catch (error) {
+      console.error(`Error loading audio buffer for ${audioFile.name}:`, error);
+      return null;
     }
   }
 

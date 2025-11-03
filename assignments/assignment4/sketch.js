@@ -169,8 +169,15 @@ async function analyzeAndCreateUIComponents(audioFiles) {
   for (let i = 0; i < audioFiles.length; i++) {
     const audioFile = audioFiles[i];
     
-    // Generate analysis for the audio file
-    audioFile.analysis = await essentiaAnalyzer.analyzeAudio(null); // Will use mock data for now
+    console.log(`Analyzing ${audioFile.name}...`);
+    
+    // Load audio buffer for Essentia analysis
+    const audioBuffer = await audioManager.loadAudioBuffer(audioFile);
+    
+    // Analyze with Essentia (will use mock if buffer loading fails)
+    audioFile.analysis = await essentiaAnalyzer.analyzeAudio(audioBuffer);
+    
+    console.log(`Analysis complete for ${audioFile.name}:`, audioFile.analysis);
     
     // Create UI component for this audio file
     const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);

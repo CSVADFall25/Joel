@@ -8,64 +8,148 @@ class EssentiaAnalyzer {
 
   async initialize() {
     try {
-      if (typeof Essentia !== 'undefined') {
-        this.essentia = new Essentia();
+      // Wait for Essentia to be loaded globally (initialized in index.html)
+      let attempts = 0;
+      while (!window.essentia && attempts < 50) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        attempts++;
+      }
+      
+      if (window.essentia) {
+        this.essentia = window.essentia;
         this.isInitialized = true;
-        console.log('Essentia.js initialized successfully');
+        console.log('✅ Essentia.js initialized successfully');
+        console.log('Available algorithms:', Object.keys(this.essentia).slice(0, 10));
       } else {
-        console.warn('Essentia.js not available, using mock analysis');
+        console.warn('⚠️ Essentia.js not available after waiting, using mock analysis');
         this.isInitialized = false;
       }
     } catch (error) {
-      console.error('Error initializing Essentia.js:', error);
+      console.error('❌ Error initializing Essentia.js:', error);
       this.isInitialized = false;
     }
   }
 
   // Analyze audio file for energy, mood, key, etc.
   async analyzeAudio(audioBuffer) {
-    if (!this.isInitialized) {
+    // If no audio buffer provided or Essentia not initialized, use mock data
+    if (!audioBuffer || !this.isInitialized) {
+      console.log('Using mock analysis (Essentia not available or no audio buffer)');
       return this.generateMockAnalysis();
     }
 
     try {
+      console.log(`Analyzing audio with Essentia.js (buffer length: ${audioBuffer.length})`);
       const analysis = {};
       
-      // Convert audio buffer to format expected by Essentia
-      const audioVector = this.essentia.arrayToVector(audioBuffer);
+      // Take a sample of the audio for analysis (to speed up processing)
+      const sampleSize = Math.min(audioBuffer.length, 44100 * 30); // Max 30 seconds
+      const audioSample = audioBuffer.slice(0, sampleSize);
       
-      // Energy analysis
-      const rms = this.essentia.RMS(audioVector);
-      analysis.energy = Math.min(rms.rms * 10, 1.0); // Normalize to 0-1
+      // Convert to Float32Array if needed
+      const audioFloat32 = audioSample instanceof Float32Array ? audioSample : new Float32Array(audioSample);
       
-      // Spectral analysis for mood estimation
-      const spectrum = this.essentia.Spectrum(audioVector);
-      const spectralCentroid = this.essentia.SpectralCentroid(spectrum.spectrum);
-      analysis.mood = Math.min(spectralCentroid.spectralCentroid / 5000, 1.0); // Rough mood estimation
+      // Convert Float32Array to Essentia VectorFloat
+      const audioVector = this.essentia.arrayToVector(audioFloat32);
       
-      // Key detection
-      const keyExtractor = this.essentia.KeyExtractor();
-      const keyResult = keyExtractor(audioVector);
-      analysis.key = keyResult.key;
-      analysis.scale = keyResult.scale;
+      // Energy analysis using RMS
+      try {
+        const rmsResult = this.essentia.RMS(audioVector);
+        analysis.energy = Math.min(rmsResult.rms * 3, 1.0); // Normalize to 0-1
+        console.log('Energy (RMS):', analysis.energy);
+      } catch (e) {
+        console.warn('RMS failed:', e);
+        analysis.energy = 0.5;
+      }
       
-      // Tempo estimation
-      const beatTracker = this.essentia.BeatTrackerMultiFeature();
-      const beatResult = beatTracker(audioVector);
-      analysis.tempo = beatResult.bpm;
+      // Spectrum for frequency analysis
+      let spectrum = null;
+      try {
+        const spectrumResult = this.essentia.Spectrum(audioVector);
+        spectrum = spectrumResult.spectrum;
+      } catch (e) {
+        console.warn('Spectrum calculation failed:', e);
+      }
       
-      // Onset detection for structure analysis
-      const onsetDetector = this.essentia.OnsetDetection();
-      const onsets = onsetDetector(spectrum.spectrum);
-      analysis.onsetRate = onsets.onsetDetection;
+      // Spectral centroid for mood estimation
+      if (spectrum) {
+        try {
+          const centroidResult = this.essentia.Centroid(spectrum);
+          analysis.mood = Math.min(centroidResult.centroid / 5000, 1.0);
+          console.log('Mood (Centroid):', analysis.mood);
+        } catch (e) {
+          console.warn('Centroid failed:', e);
+          analysis.mood = 0.5;
+        }
+      } else {
+        analysis.mood = 0.5;
+      }
       
-      // Estimate song structure based on onset rate and energy
+      // Key detection - use the high-level KeyExtractor algorithm
+      try {
+        // KeyExtractor takes the full audio signal and returns key/scale/strength
+        const keyResult = this.essentia.KeyExtractor(audioVector);
+        analysis.key = keyResult.key;
+        analysis.scale = keyResult.scale;
+        analysis.keyStrength = keyResult.strength;
+        console.log('Key detection successful:', analysis.key, analysis.scale, 'strength:', analysis.keyStrength);
+      } catch (e) {
+        console.error('KeyExtractor failed:', e);
+        
+        // Try manual HPCP + Key approach as fallback
+        if (spectrum) {
+          try {
+            // SpectralPeaks is needed before HPCP
+            const peaksResult = this.essentia.SpectralPeaks(spectrum);
+            
+            // HPCP needs frequencies and magnitudes from spectral peaks
+            const hpcpResult = this.essentia.HPCP(
+              peaksResult.frequencies,
+              peaksResult.magnitudes
+            );
+            
+            const keyResult = this.essentia.Key(hpcpResult.hpcp);
+            analysis.key = keyResult.key;
+            analysis.scale = keyResult.scale;
+            console.log('Manual key detection successful:', analysis.key, analysis.scale);
+          } catch (e2) {
+            console.error('Manual key detection also failed:', e2);
+            throw new Error('All key detection methods failed');
+          }
+        } else {
+          throw new Error('No spectrum available for key detection');
+        }
+      }
+      
+      // Tempo - simplified approach
+      try {
+        const rhythmResult = this.essentia.RhythmExtractor2013(audioVector);
+        analysis.tempo = rhythmResult.bpm || 120;
+        console.log('Tempo:', analysis.tempo);
+      } catch (e) {
+        console.warn('Tempo detection failed:', e);
+        analysis.tempo = 120;
+      }
+      
+      // Loudness
+      try {
+        const loudnessResult = this.essentia.Loudness(audioVector);
+        analysis.loudness = Math.min(loudnessResult.loudness / 100, 1.0);
+        console.log('Loudness:', analysis.loudness);
+      } catch (e) {
+        console.warn('Loudness calculation failed:', e);
+        analysis.loudness = 0.5;
+      }
+      
+      // Estimate song structure based on energy and loudness
       analysis.structure = this.estimateStructure(analysis);
       
+      console.log('✅ Essentia analysis complete:', analysis);
       return analysis;
       
     } catch (error) {
-      console.error('Error analyzing audio with Essentia:', error);
+      console.error('❌ Error analyzing audio with Essentia:', error);
+      console.log('Falling back to mock analysis');
       return this.generateMockAnalysis();
     }
   }
@@ -89,16 +173,16 @@ class EssentiaAnalyzer {
   // Estimate song structure based on analysis features
   estimateStructure(analysis) {
     const energy = analysis.energy;
-    const onsetRate = analysis.onsetRate || 0.5;
+    const loudness = analysis.loudness || 0.5;
     
     // Simple heuristic for structure classification
-    if (energy > 0.8 && onsetRate > 0.7) {
+    if (energy > 0.7 && loudness > 0.6) {
       return 'chorus';
-    } else if (energy > 0.6 && onsetRate > 0.5) {
+    } else if (energy > 0.5 && loudness > 0.4) {
       return 'pre-chorus';
     } else if (energy < 0.3) {
       return 'outro';
-    } else if (onsetRate > 0.6) {
+    } else if (energy > 0.6) {
       return 'hook';
     } else {
       return 'verse';
