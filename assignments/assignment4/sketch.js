@@ -615,21 +615,7 @@ function drawEnergyMoodGrid() {
   line(-gridWidth/2, 0, gridWidth/2, 0); // Energy axis (horizontal)
   line(0, -gridHeight/2, 0, gridHeight/2); // Mood axis (vertical)
   
-  // Grid lines
-  strokeWeight(0.5);
-  stroke(colors.textMuted);
-  const stepX = gridWidth / 8;
-  const stepY = gridHeight / 6;
-  for (let i = -gridHeight/2; i <= gridHeight/2; i += stepY) {
-    if (Math.abs(i) > 1) {
-      line(-gridWidth/2, i, gridWidth/2, i);
-    }
-  }
-  for (let i = -gridWidth/2; i <= gridWidth/2; i += stepX) {
-    if (Math.abs(i) > 1) {
-      line(i, -gridHeight/2, i, gridHeight/2);
-    }
-  }
+  // Grid lines removed - keeping only axes
   
   // Labels (positioned outside the grid)
   fill(colors.text);
