@@ -1,10 +1,11 @@
 // Global variables
 let audioManager;
-let essentiaAnalyzer;
+let essentiaWorker; // Changed from essentiaAnalyzer to essentiaWorker
 let audioPlayerUIs = [];
 let visualMode = 'energy-mood'; // 'energy-mood', 'circle-of-fifths', 'song-structure'
 let modeDropdown;
 let isLoading = true;
+let processingStatus = { current: 0, total: 0 }; // Track processing progress
 
 // Colors inspired by jaffx.audio (modern dark theme with orange accents)
 const colors = {
@@ -22,7 +23,7 @@ async function setup() {
   
   // Initialize managers
   audioManager = new AudioManager();
-  essentiaAnalyzer = new EssentiaAnalyzer();
+  essentiaWorker = new EssentiaWorkerManager(); // Use worker instead of analyzer
   
   // Create mode selector dropdown
   createModeSelector();
@@ -145,19 +146,24 @@ async function initializeApp() {
   console.log('🚀 Initializing EssentiaTest app...');
   
   try {
-    // Initialize Essentia analyzer
-    console.log('⏳ Initializing Essentia analyzer...');
-    await essentiaAnalyzer.initialize();
-    console.log('✅ Essentia initialized');
+    // Initialize Essentia Web Worker
+    console.log('⏳ Initializing Essentia Web Worker...');
+    await essentiaWorker.initialize();
+    console.log('✅ Essentia Worker initialized');
     
     // Load audio dataset
     console.log('⏳ Loading audio dataset...');
     const audioFiles = await audioManager.loadAudioDataset();
     console.log(`✅ Loaded ${audioFiles.length} audio files`);
     
+    // Set up processing status
+    processingStatus.total = audioFiles.length;
+    processingStatus.current = 0;
+    
     // Process first file synchronously to show initial UI
     console.log('⏳ Processing first audio file...');
     await processFirstAudioFile(audioFiles);
+    processingStatus.current = 1;
     
     // Show the UI after first file is ready
     isLoading = false;
@@ -185,80 +191,215 @@ async function processFirstAudioFile(audioFiles) {
     // Load audio buffer
     const audioBuffer = await audioManager.loadAudioBuffer(audioFile);
     
-    // Analyze with Essentia
-    audioFile.analysis = await essentiaAnalyzer.analyzeAudio(audioBuffer);
+    // Analyze with Essentia Worker
+    audioFile.analysis = await essentiaWorker.analyzeAudio(audioBuffer, audioFile.name);
     console.log(`✅ First file analyzed:`, audioFile.analysis);
     
     // Create UI component
     const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
-    audioPlayerUIs.push({
+    const playerData = {
       ui: ui,
       audioFile: audioFile,
       visualPosition: { x: width / 2, y: height / 2 }
-    });
+    };
+    
+    audioPlayerUIs.push(playerData);
     
     // Position the first element
-    repositionAudioPlayers();
+    positionSinglePlayer(playerData, 0);
     
   } catch (error) {
     console.error(`❌ Error processing first file:`, error);
     // Use mock analysis as fallback
-    audioFile.analysis = essentiaAnalyzer.generateMockAnalysis();
+    audioFile.analysis = essentiaWorker.generateMockAnalysis();
     
     const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
-    audioPlayerUIs.push({
+    const playerData = {
       ui: ui,
       audioFile: audioFile,
       visualPosition: { x: width / 2, y: height / 2 }
-    });
-    repositionAudioPlayers();
+    };
+    
+    audioPlayerUIs.push(playerData);
+    positionSinglePlayer(playerData, 0);
   }
 }
 
 async function processRemainingAudioFiles(audioFiles) {
   // Process remaining files one at a time (skipping first)
   for (let i = 1; i < audioFiles.length; i++) {
+    // Yield to UI before processing each file
+    await yieldToUI();
+    
     const audioFile = audioFiles[i];
     
     try {
       console.log(`🔄 [${i}/${audioFiles.length - 1}] Analyzing: ${audioFile.name}...`);
       
-      // Load and analyze (this happens in background)
+      // Load audio buffer
       const audioBuffer = await audioManager.loadAudioBuffer(audioFile);
-      audioFile.analysis = await essentiaAnalyzer.analyzeAudio(audioBuffer);
+      
+      // Yield to UI after loading
+      await yieldToUI();
+      
+      // Analyze with Essentia Worker (runs in background thread)
+      audioFile.analysis = await essentiaWorker.analyzeAudio(audioBuffer, audioFile.name);
+      
+      // Yield to UI after analysis
+      await yieldToUI();
       
       console.log(`✅ [${i}/${audioFiles.length - 1}] Complete: ${audioFile.name}`);
       
       // Create UI component
       const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
-      audioPlayerUIs.push({
+      const playerData = {
         ui: ui,
         audioFile: audioFile,
         visualPosition: { x: width / 2, y: height / 2 }
-      });
+      };
       
-      // Reposition all elements with the new addition
-      repositionAudioPlayers();
+      // Add to array
+      audioPlayerUIs.push(playerData);
       
-      // Small delay to keep UI responsive
-      await new Promise(resolve => setTimeout(resolve, 100));
+      // Update progress
+      processingStatus.current = i + 1;
+      
+      // Position ONLY this new element (don't reposition existing ones)
+      positionSinglePlayer(playerData, audioPlayerUIs.length - 1);
       
     } catch (error) {
       console.error(`❌ Error processing ${audioFile.name}:`, error);
       // Use mock analysis as fallback
-      audioFile.analysis = essentiaAnalyzer.generateMockAnalysis();
+      audioFile.analysis = essentiaWorker.generateMockAnalysis();
       
       const ui = new AudioPlayerUI(audioManager, 0, 0, 280, 80);
-      audioPlayerUIs.push({
+      const playerData = {
         ui: ui,
         audioFile: audioFile,
         visualPosition: { x: width / 2, y: height / 2 }
-      });
-      repositionAudioPlayers();
+      };
+      
+      audioPlayerUIs.push(playerData);
+      
+      // Update progress
+      processingStatus.current = i + 1;
+      
+      // Position ONLY this new element
+      positionSinglePlayer(playerData, audioPlayerUIs.length - 1);
     }
   }
   
   console.log('🎉 All audio files processed!');
+}
+
+// Helper function to yield control back to the browser for UI updates
+function yieldToUI() {
+  return new Promise(resolve => {
+    // Use setTimeout with 0 to yield to the event loop
+    setTimeout(resolve, 0);
+  });
+}
+
+// Position a single audio player without affecting others
+function positionSinglePlayer(playerData, index) {
+  const audioFile = playerData.audioFile;
+  const analysis = audioFile.analysis;
+  
+  if (!analysis) return;
+  
+  const centerX = width / 2;
+  const centerY = height / 2;
+  
+  // Calculate available space
+  const availableWidth = width - 40;
+  const availableHeight = height - 120;
+  const maxRadius = Math.min(availableWidth, availableHeight) / 2 * 0.9;
+  
+  let x, y;
+  let attempts = 0;
+  const maxAttempts = 50;
+  
+  // Keep trying to find a non-overlapping position
+  do {
+    switch (visualMode) {
+      case 'energy-mood':
+        const gridWidth = availableWidth * 0.8;
+        const gridHeight = availableHeight * 0.8;
+        
+        x = centerX + (analysis.energy - 0.5) * gridWidth;
+        y = centerY - (analysis.mood - 0.5) * gridHeight;
+        
+        // Add random offset on subsequent attempts
+        if (attempts > 0) {
+          x += (Math.random() - 0.5) * 60 * attempts;
+          y += (Math.random() - 0.5) * 60 * attempts;
+        }
+        
+        // Constrain to grid boundaries
+        const uiMarginX = playerData.ui.minimized ? 25 : 140;
+        const uiMarginY = playerData.ui.minimized ? 25 : 40;
+        x = constrain(x, centerX - gridWidth/2 + uiMarginX, centerX + gridWidth/2 - uiMarginX);
+        y = constrain(y, centerY - gridHeight/2 + uiMarginY, centerY + gridHeight/2 - uiMarginY);
+        break;
+        
+      case 'circle-of-fifths':
+        const keyPosition = essentiaWorker.keyToCirclePosition(analysis.key);
+        const sliceAngle = TWO_PI / 12;
+        const baseAngle = (keyPosition * sliceAngle) - PI/2;
+        
+        const minRadius = maxRadius * 0.2;
+        const maxRadiusForUI = maxRadius * 0.7;
+        const randomRadius = minRadius + Math.random() * (maxRadiusForUI - minRadius);
+        
+        const slicePadding = sliceAngle * 0.1;
+        const randomAngle = baseAngle + (Math.random() - 0.5) * (sliceAngle - slicePadding * 2);
+        
+        x = centerX + cos(randomAngle) * randomRadius;
+        y = centerY + sin(randomAngle) * randomRadius;
+        
+        // Add offset on subsequent attempts
+        if (attempts > 0) {
+          const offsetRadius = 30 * attempts;
+          const offsetAngle = randomAngle + (Math.random() - 0.5) * sliceAngle * 0.5;
+          x = centerX + cos(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
+          y = centerY + sin(offsetAngle) * constrain(randomRadius + offsetRadius, minRadius, maxRadiusForUI);
+        }
+        break;
+        
+      case 'song-structure':
+        const structCoords = essentiaWorker.getStructureCoordinates(analysis.structure, availableWidth, availableHeight);
+        x = centerX + structCoords.x;
+        y = centerY + structCoords.y;
+        
+        // Add offset on subsequent attempts
+        if (attempts > 0) {
+          x += (Math.random() - 0.5) * 80 * attempts;
+          y += (Math.random() - 0.5) * 80 * attempts;
+        }
+        break;
+        
+      default:
+        x = 50 + (index % 3) * 300;
+        y = 100 + Math.floor(index / 3) * 100;
+    }
+    
+    // Apply general constraints for song-structure and default
+    if (visualMode === 'song-structure' || visualMode === 'default') {
+      const marginX = playerData.ui.minimized ? 30 : 20;
+      const marginY = playerData.ui.minimized ? 80 : 100;
+      const bottomMargin = visualMode === 'song-structure' ? 120 : (playerData.ui.minimized ? 50 : 100);
+      x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
+      y = constrain(y, marginY, height - bottomMargin);
+    }
+    
+    attempts++;
+    
+  } while (checkOverlap(playerData, x, y) && attempts < maxAttempts);
+  
+  // Set final position
+  playerData.ui.x = x;
+  playerData.ui.y = y;
+  playerData.visualPosition = { x, y };
 }
 
 function repositionAudioPlayers() {
@@ -309,7 +450,7 @@ function repositionAudioPlayers() {
           
         case 'circle-of-fifths':
           // Get key position (0-11)
-          const keyPosition = essentiaAnalyzer.keyToCirclePosition(analysis.key);
+          const keyPosition = essentiaWorker.keyToCirclePosition(analysis.key);
           const sliceAngle = TWO_PI / 12;
           const baseAngle = (keyPosition * sliceAngle) - PI/2;
           
@@ -335,7 +476,7 @@ function repositionAudioPlayers() {
           break;
           
         case 'song-structure':
-          const structCoords = essentiaAnalyzer.getStructureCoordinates(analysis.structure, availableWidth, availableHeight);
+          const structCoords = essentiaWorker.getStructureCoordinates(analysis.structure, availableWidth, availableHeight);
           x = centerX + structCoords.x;
           y = centerY + structCoords.y;
           break;
