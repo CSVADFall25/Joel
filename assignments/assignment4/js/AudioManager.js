@@ -10,28 +10,112 @@ class AudioManager {
   // Load audio files from Hugging Face dataset
   async loadAudioDataset() {
     try {
-      console.log('Loading audio dataset from Hugging Face...');
+      console.log('🔄 Loading audio dataset from Hugging Face...');
       
-      // Hugging Face dataset API endpoint
-      const datasetUrl = 'https://huggingface.co/api/datasets/joeljaffesd/jamlog/tree/main';
+      // First, get the main directory structure
+      const mainUrl = 'https://huggingface.co/api/datasets/joeljaffesd/jamlog/tree/main';
+      console.log(`🔗 Fetching main directory: ${mainUrl}`);
       
-      const response = await fetch(datasetUrl);
-      const data = await response.json();
+      const mainResponse = await fetch(mainUrl, {
+        headers: { 'Accept': 'application/json' }
+      });
       
-      // Filter for audio files
-      const audioFiles = data.filter(file => 
-        file.type === 'file' && 
-        (file.path.endsWith('.mp3') || file.path.endsWith('.wav') || file.path.endsWith('.ogg'))
-      );
+      if (!mainResponse.ok) {
+        throw new Error(`HTTP ${mainResponse.status}: ${mainResponse.statusText}`);
+      }
       
-      console.log(`Found ${audioFiles.length} audio files`);
+      const mainData = await mainResponse.json();
+      console.log('📊 Main directory contents:', mainData);
+      
+      // Find all subdirectories (date folders)
+      const subdirectories = mainData.filter(item => item.type === 'directory');
+      console.log(`📁 Found ${subdirectories.length} subdirectories`);
+      
+      // Collect all audio files from all subdirectories
+      let allAudioFiles = [];
+      
+      for (const dir of subdirectories.slice(0, 5)) { // Limit to first 5 directories for demo
+        try {
+          console.log(`🔍 Exploring directory: ${dir.path}`);
+          
+          // First check if there's an 'audio' subdirectory
+          const dirUrl = `https://huggingface.co/api/datasets/joeljaffesd/jamlog/tree/main/${dir.path}`;
+          const dirResponse = await fetch(dirUrl, {
+            headers: { 'Accept': 'application/json' }
+          });
+          
+          if (dirResponse.ok) {
+            const dirData = await dirResponse.json();
+            
+            // Look for audio subdirectory
+            const audioSubdir = dirData.find(item => item.type === 'directory' && item.path.endsWith('/audio'));
+            
+            if (audioSubdir) {
+              console.log(`🎵 Found audio subdirectory: ${audioSubdir.path}`);
+              
+              // Fetch files from the audio subdirectory
+              const audioUrl = `https://huggingface.co/api/datasets/joeljaffesd/jamlog/tree/main/${audioSubdir.path}`;
+              const audioResponse = await fetch(audioUrl, {
+                headers: { 'Accept': 'application/json' }
+              });
+              
+              if (audioResponse.ok) {
+                const audioData = await audioResponse.json();
+                
+                // Filter for audio files
+                const audioFiles = audioData.filter(file => {
+                  const isFile = file.type === 'file';
+                  const isAudio = file.path && (
+                    file.path.endsWith('.mp3') || 
+                    file.path.endsWith('.wav') || 
+                    file.path.endsWith('.ogg') ||
+                    file.path.endsWith('.m4a') ||
+                    file.path.endsWith('.flac')
+                  );
+                  return isFile && isAudio;
+                });
+                
+                console.log(`🎶 Found ${audioFiles.length} audio files in ${audioSubdir.path}`);
+                allAudioFiles.push(...audioFiles);
+              }
+            } else {
+              // Fallback: look for audio files directly in the date directory
+              const audioFiles = dirData.filter(file => {
+                const isFile = file.type === 'file';
+                const isAudio = file.path && (
+                  file.path.endsWith('.mp3') || 
+                  file.path.endsWith('.wav') || 
+                  file.path.endsWith('.ogg') ||
+                  file.path.endsWith('.m4a') ||
+                  file.path.endsWith('.flac')
+                );
+                return isFile && isAudio;
+              });
+              
+              console.log(`� Found ${audioFiles.length} audio files directly in ${dir.path}`);
+              allAudioFiles.push(...audioFiles);
+            }
+            
+            // Limit total files for demo
+            if (allAudioFiles.length >= 15) break;
+            
+          }
+        } catch (dirError) {
+          console.warn(`⚠️ Failed to explore ${dir.path}:`, dirError.message);
+        }
+      }
+      
+      if (allAudioFiles.length === 0) {
+        throw new Error('No audio files found in any subdirectory');
+      }
       
       // Create audio file objects with metadata
-      this.audioFiles = audioFiles.map((file, index) => ({
+      this.audioFiles = allAudioFiles.map((file, index) => ({
         id: index,
         name: file.path.split('/').pop(),
         url: `https://huggingface.co/datasets/joeljaffesd/jamlog/resolve/main/${file.path}`,
         path: file.path,
+        size: file.size || 'Unknown',
         duration: 0,
         analysis: null,
         audioElement: null,
@@ -40,10 +124,16 @@ class AudioManager {
         currentTime: 0
       }));
       
+      console.log(`🎵 Successfully loaded ${this.audioFiles.length} audio files:`);
+      this.audioFiles.forEach(file => {
+        console.log(`  - ${file.name} (${file.size} bytes)`);
+      });
+      
       return this.audioFiles;
       
     } catch (error) {
-      console.error('Error loading audio dataset:', error);
+      console.error('❌ Error loading audio dataset from Hugging Face:', error);
+      console.log('📦 Falling back to dummy data for demonstration...');
       
       // Fallback: create dummy data for testing
       this.audioFiles = this.createDummyAudioData();
