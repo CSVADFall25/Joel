@@ -92,12 +92,9 @@ class AudioManager {
                 return isFile && isAudio;
               });
               
-              console.log(`� Found ${audioFiles.length} audio files directly in ${dir.path}`);
+              console.log(`🎶 Found ${audioFiles.length} audio files directly in ${dir.path}`);
               allAudioFiles.push(...audioFiles);
             }
-            
-            // Limit total files for demo
-            if (allAudioFiles.length >= 15) break;
             
           }
         } catch (dirError) {
