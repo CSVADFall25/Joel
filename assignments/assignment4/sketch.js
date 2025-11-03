@@ -232,8 +232,9 @@ function repositionAudioPlayers() {
     // Use smaller margins for minimized circles
     const marginX = playerData.ui.minimized ? 30 : 20;
     const marginY = playerData.ui.minimized ? 80 : 100;
+    const bottomMargin = visualMode === 'song-structure' ? 120 : (playerData.ui.minimized ? 50 : 100);
     x = constrain(x, marginX, width - (playerData.ui.minimized ? 30 : 300));
-    y = constrain(y, marginY, height - (playerData.ui.minimized ? 50 : 100));
+    y = constrain(y, marginY, height - bottomMargin);
     
     playerData.ui.x = x;
     playerData.ui.y = y;
@@ -382,28 +383,37 @@ function drawCircleOfFifths() {
 function drawSongStructure() {
   // Calculate available space for structure categories
   const availableWidth = width - 40;
-  const availableHeight = height - 120;
+  const availableHeight = height - 160; // Leave more space at bottom for UI text
   
-  // Draw 5 categories
+  // Draw 5 categories side by side
   const categories = ['Hook', 'Verse', 'Pre-Chorus', 'Chorus', 'Outro'];
-  const categoryWidth = availableWidth * 0.8;
-  const categoryHeight = Math.min(80, availableHeight / categories.length * 0.8);
-  const spacing = availableHeight / categories.length;
+  const categoryWidth = availableWidth / categories.length;
+  const categoryHeight = 60;
+  const headerY = -availableHeight/2 + categoryHeight/2; // Top of the visualization area
   
   for(let i = 0; i < categories.length; i++) {
-    let x = -categoryWidth/2;
-    let y = (i - (categories.length - 1) / 2) * spacing;
+    let x = -availableWidth/2 + i * categoryWidth + categoryWidth/2;
+    let y = headerY;
     
+    // Draw category header background
     fill(colors.surface);
     stroke(colors.primary);
     strokeWeight(2);
-    rect(x, y - categoryHeight/2, categoryWidth, categoryHeight, 8);
+    rect(x - categoryWidth/2 + 10, y - categoryHeight/2, categoryWidth - 20, categoryHeight, 8);
     
+    // Draw category label
     fill(colors.text);
     noStroke();
     textAlign(CENTER);
-    textSize(Math.max(14, categoryHeight * 0.3));
-    text(categories[i], 0, y + 6);
+    textSize(16);
+    text(categories[i], x, y + 6);
+    
+    // Draw vertical line to separate columns
+    if (i < categories.length - 1) {
+      stroke(colors.primary);
+      strokeWeight(1);
+      line(x + categoryWidth/2 - 10, y - categoryHeight/2, x + categoryWidth/2 - 10, availableHeight/2);
+    }
   }
 }
 

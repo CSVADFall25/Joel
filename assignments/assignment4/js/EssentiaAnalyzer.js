@@ -135,13 +135,21 @@ class EssentiaAnalyzer {
     
     if (categoryIndex === -1) return { x: 0, y: 0 };
     
-    const categoryWidth = maxWidth * 0.8;
-    const categoryHeight = maxHeight / categories.length * 0.6;
-    const spacing = maxHeight / categories.length * 0.2;
+    const categoryWidth = maxWidth / categories.length;
+    const headerHeight = 60;
+    const availableHeight = maxHeight - headerHeight - 40; // Leave space at bottom for UI text
+    
+    // Position clips in columns below headers
+    const columnX = -maxWidth/2 + categoryIndex * categoryWidth + categoryWidth/2;
+    const columnWidth = categoryWidth - 20; // Leave some margin
+    
+    // Random position within the column, below the header
+    const x = columnX + (Math.random() - 0.5) * (columnWidth * 0.8);
+    const y = headerHeight/2 + Math.random() * (availableHeight * 0.8);
     
     return {
-      x: -categoryWidth/2 + Math.random() * categoryWidth,
-      y: (categoryIndex - (categories.length - 1) / 2) * (categoryHeight + spacing) + (Math.random() - 0.5) * categoryHeight * 0.8,
+      x: x,
+      y: y,
       category: structure,
       categoryIndex: categoryIndex
     };
