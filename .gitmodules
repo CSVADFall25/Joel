@@ -4,3 +4,6 @@
 [submodule "MAT236-Project-2"]
 	path = MAT236-Project-2
 	url = https://github.com/joeljaffesd/EssentiaSketch
+[submodule "MAT236-Final-Project"]
+	path = MAT236-Final-Project
+	url = https://github.com/joeljaffesd/engrav3r
